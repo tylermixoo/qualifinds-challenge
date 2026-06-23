@@ -17,6 +17,7 @@ export type WorkflowPlan = {
   steps: WorkflowStep[];
   assumptions: string[];
   risks: string[];
+  created_at: string;
 };
 
 export type StepExecutionResult = {
@@ -32,11 +33,12 @@ export type WorkflowExecution = {
   tenant_id: string;
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
   step_results: StepExecutionResult[];
+  created_at: string;
 };
 
 export async function planWorkflow({
   tenantId,
-  instruction
+  instruction,
 }: {
   tenantId: string;
   instruction: string;
@@ -47,12 +49,9 @@ export async function planWorkflow({
       "Content-Type": "application/json",
       Authorization: "Bearer demo-token",
       "X-Tenant-Id": tenantId,
-      "X-User-Id": "frontend_user"
+      "X-User-Id": "frontend_user",
     },
-    body: JSON.stringify({
-      tenant_id: tenantId,
-      instruction
-    })
+    body: JSON.stringify({ tenant_id: tenantId, instruction }),
   });
 
   if (!response.ok) {
@@ -65,10 +64,12 @@ export async function planWorkflow({
 
 export async function executeWorkflow({
   tenantId,
-  workflowId
+  workflowId,
+  triggerPayload = {},
 }: {
   tenantId: string;
   workflowId: string;
+  triggerPayload?: Record<string, unknown>;
 }): Promise<WorkflowExecution> {
   const response = await fetch(`${API_BASE_URL}/workflows/${workflowId}/execute`, {
     method: "POST",
@@ -76,15 +77,13 @@ export async function executeWorkflow({
       "Content-Type": "application/json",
       Authorization: "Bearer demo-token",
       "X-Tenant-Id": tenantId,
-      "X-User-Id": "frontend_user"
+      "X-User-Id": "frontend_user",
     },
     body: JSON.stringify({
       tenant_id: tenantId,
       workflow_id: workflowId,
-      trigger_payload: {
-        company_id: "company_demo"
-      }
-    })
+      trigger_payload: triggerPayload,
+    }),
   });
 
   if (!response.ok) {
