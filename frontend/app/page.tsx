@@ -1,15 +1,23 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-
 import { executeWorkflow, planWorkflow } from "../lib/api";
 import type { WorkflowExecution, WorkflowPlan } from "../lib/api";
 
 const sampleInstruction =
   "When a new HubSpot lead has more than 500 employees, enrich the company profile, create a follow-up task, and notify the sales team in Slack.";
 
+const STATUS_EMOJI: Record<string, string> = {
+  succeeded: "✅",
+  failed: "❌",
+  skipped: "⏭️",
+  pending: "⏳",
+  running: "🔄",
+};
+
 export default function Home() {
   const [instruction, setInstruction] = useState(sampleInstruction);
+  const [companyId, setCompanyId] = useState("company_demo");
   const [plan, setPlan] = useState<WorkflowPlan | null>(null);
   const [execution, setExecution] = useState<WorkflowExecution | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,14 +28,11 @@ export default function Home() {
     event.preventDefault();
     setLoading(true);
     setError(null);
-
+    setPlan(null);
+    setExecution(null);
     try {
-      const result = await planWorkflow({
-        tenantId: "tenant_acme",
-        instruction
-      });
+      const result = await planWorkflow({ tenantId: "tenant_acme", instruction });
       setPlan(result);
-      setExecution(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
     } finally {
@@ -36,16 +41,14 @@ export default function Home() {
   }
 
   async function onExecute() {
-    if (!plan) {
-      return;
-    }
+    if (!plan) return;
     setExecuting(true);
     setError(null);
-
     try {
       const result = await executeWorkflow({
         tenantId: "tenant_acme",
-        workflowId: plan.workflow_id
+        workflowId: plan.workflow_id,
+        triggerPayload: { company_id: companyId },
       });
       setExecution(result);
     } catch (err) {
@@ -67,12 +70,19 @@ export default function Home() {
         </div>
 
         <form className="composer" onSubmit={onSubmit}>
-          <label htmlFor="instruction">Instruction</label>
+          <label htmlFor="instruction">Natural-language instruction</label>
           <textarea
             id="instruction"
             value={instruction}
-            onChange={(event) => setInstruction(event.target.value)}
-            rows={6}
+            onChange={(e) => setInstruction(e.target.value)}
+            rows={5}
+          />
+          <label htmlFor="companyId">Trigger: company_id</label>
+          <input
+            id="companyId"
+            type="text"
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
           />
           <button type="submit" disabled={loading}>
             {loading ? "Planning..." : "Plan workflow"}
@@ -93,6 +103,7 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+
               <ol className="steps">
                 {plan.steps.map((step) => (
                   <li key={step.step_id}>
@@ -106,20 +117,52 @@ export default function Home() {
                   </li>
                 ))}
               </ol>
+
+              {plan.assumptions.length > 0 && (
+                <div className="assumptions">
+                  <h3>Assumptions</h3>
+                  <ul>
+                    {plan.assumptions.map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {plan.risks.length > 0 && (
+                <div className="risks">
+                  <h3>Risks</h3>
+                  <ul>
+                    {plan.risks.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {execution ? (
                 <div className="execution">
                   <div className="resultsHeader">
                     <h2>{execution.execution_id}</h2>
-                    <span className={`badge ${execution.status}`}>{execution.status}</span>
+                    <span className={`badge ${execution.status}`}>
+                      {STATUS_EMOJI[execution.status] ?? ""} {execution.status}
+                    </span>
                   </div>
                   <ol className="steps">
                     {execution.step_results.map((result) => (
                       <li key={result.step_id}>
                         <div>
                           <strong>{result.step_id}</strong>
-                          <p>{result.status}</p>
+                          <p>
+                            {STATUS_EMOJI[result.status] ?? ""} {result.status}
+                          </p>
                         </div>
                         {result.error ? <code>{result.error}</code> : null}
+                        {result.output && Object.keys(result.output).length > 0 ? (
+                          <pre className="output">
+                            {JSON.stringify(result.output, null, 2)}
+                          </pre>
+                        ) : null}
                       </li>
                     ))}
                   </ol>
